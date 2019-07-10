@@ -15,6 +15,7 @@ var cors = require('cors');
 var firebase = require('firebase-admin');
 require("firebase/auth");
 var serviceAccount = require("C:/Users/abdul/Downloads/koch-pwa-db-firebase-adminsdk-endg9-7134d2a134.json");
+var storage = require('@google-cloud/storage')
 
 //initialize Firebase
 firebase.initializeApp({
@@ -60,76 +61,75 @@ app.use(function (err, req, res, next) {
 });
 
 
-//Admin access
+//Admin-SDK firebase access
 var db = firebase.database();
-// var ref = db.ref("embedded/recipes");
-// ref.once("value", function (snapshot) {
-//     console.log("Database: ",snapshot.val());
-// });
 
+var updateDataToDB = function (req, res) {
+    console.log("------DB:Update Data from updateDataToDB");
+    console.log("------DB:Request-Body-Data: ", req.body);
+    db.ref('embedded/recipes').child(req.params.id).update(req.body)
+        .then(() => {
+            res.status(201).json({data: req.body, id: req.params.id, status: "created"});
+        })
+        .catch((error) => {
+            sendErrorToClient(res, error);
+        })
+};
 var setDataToDb = function (req,res) {
     console.log("------DB:Write Data from setDataToDB");
     console.log("------DB:Request-Body-Data: ", req);
-    db.ref('embedded/recipes').push(req)
+    let key;
+    db.ref('embedded/recipes').push({
+        title: req.title,
+        description: req.description,
+        ingredients: req.ingredients,
+        preparation: req.preparation,
+        category: req.category,
+        creatorId: req.creatorId
+    })
+        .then((data) => {
+            key = data.key;
+            return key;
+        })
         .then(() => {
-            return db.ref("embedded/subscriptions").once("value")
-                .then(subscriptions => {
-                    console.log(">>>>>>>>>>>>1");
-                    subscriptions.forEach(sub => {
-                        console.log(">>>>>>>>>>>>2");
-                        const pushSubscription = sub.val();
-                        const payload = 'Here is a payload!';
-
-                        const options = {
-                            gcmAPIKey: 'AAAAJWmuXTc:APA91bGztAb-zyy1C6bwdP6yRFw6ANzcpiKJ-KPmW1fsixgiFEScfB9o8xppsboEpcFeX12RpohKcTu4i2V7sX1uYwQq_0pqne0ZZF-hpKSybZroXQleQTNwPxwQgI3zxYe38I4TXPKj',
-                            TTL: 60,
-                            // TODO 4.3b - add VAPID details
-                        }
-                        webpush.sendNotification(
-                            pushSubscription,
-                            payload,
-                            options
-                        )
-                            .catch(err => {
-                                console.log(err);
-                                res.status(500).send(err);
-                            })
-                    });
-                    console.log(">>>>>>>>>>>>3")
-                    res.status(201).json({message: "Data stored", status: "created"});
-                })
-                .catch((error) => {
-                    console.log(error);
-                    res.status(500).send(error);
-                })
-        });
-}
-
+            return sendWebNotificationToSubs(res)
+        })
+        .then(() => {
+            res.status(201).json({ data: req, key: key, status: "created" });
+        })
+        .catch((error) => {
+            sendErrorToClient(res, error);
+        })
+};
 
 var getDataFromDb = function (res) {
     db.ref('embedded/recipes').once('value')
-        .then((data)=> {
-            console.log("------DB:Got Data: ", data.val());
-            const recipes = [];
-            const obj = data.val();
-            for(let key in obj){
-                recipes.push({
-                    id: key,
-                    name: obj[key].name,
-                    title: obj[key].title,
-                    imageURL: obj[key].imageURL,
-                    description: obj[key].description,
-                    ingredients: obj[key].ingredients,
-                    creatorId: obj[key].creatorId
-                });
-            };
-            console.log(recipes);
+        .then((data) => {
+            console.log("------------------DB:Got Data: ", data.val());
+            return loadRecipes(data);
+        })
+        .then( (recipes) => {
             res.status(200).json({recipes});
         })
         .catch((error) => {
-            res.status(500).send(error);
+            sendErrorToClient(res, error);
         })
 };
+
+var removeDataFromDB = function (req, res, next) {
+    console.log("------DB:Write Data from removeDataFromDB");
+    console.log("------DB:Request-Body-Data: ", req.body);
+    console.log("------DB:ID: ", req.params.id);
+    db.ref('recipes/' + req.params.id).remove()
+        .then((key) => {
+            console.log(key)
+            res.status(200).json({message: "Content deleted", key: key });
+        })
+        .catch((error) => {
+            sendErrorToClient(res, error);
+        })
+};
+
 var setUserToDB = function (req, res, next) {
     let user;
     console.log("------setUserToDB");
@@ -149,10 +149,13 @@ var setUserToDB = function (req, res, next) {
                 res.status(201).json({newUser});
             })
         .catch((error) => {
-            res.status(500).send(error);
-            console.log(error);
-        });
+            sendErrorToClient(res, error);
+        })
 };
+
+
+
+
 
 var setSubscriptionToDB = function (req, res) {
     console.log("------DB:Write Data from setSubscriptionToDB");
@@ -162,68 +165,103 @@ var setSubscriptionToDB = function (req, res) {
             res.status(201).json({data, status: "created"})
         })
         .catch((error) => {
-            res.status(500).send(error);
+            sendErrorToClient(res, error);
         })
 };
 
+var sendWebNotificationToSubs = function(res) {
+    return db.ref("embedded/subscriptions").once("value")
+        .then(subscriptions => {
+            subscriptions.forEach(sub => {
+                const pushSubscription = sub.val();
+                const payload = {
+                    title: "New recipe",
+                    content: "Check out the new recipe!"
+                };
+                const options = {
+                    gcmAPIKey: 'AAAAJWmuXTc:APA91bGztAb-zyy1C6bwdP6yRFw6ANzcpiKJ-KPmW1fsixgiFEScfB9o8xppsboEpcFeX12RpohKcTu4i2V7sX1uYwQq_0pqne0ZZF-hpKSybZroXQleQTNwPxwQgI3zxYe38I4TXPKj',
+                    TTL: 60,
+                };
+                webpush.sendNotification(
+                    pushSubscription,
+                    JSON.stringify({
+                        title: payload.title,
+                        content: payload.content
+                    }),
+                    options
+                )
+                    .catch(error => {
+                        sendErrorToClient(res, error)
+                    })
+            });
+        })
+};
 
-// ----------Post-Endpoint-------------------------------------------------------
-// indexRouter.post('/post-own-recipe', function(req, res, next) {
-//     // console.log('response', res);
-//     console.log('request', req.body);
-//     setDataToDb(req.body,res);
-// });
-//
-// indexRouter.get('/post-own-recipe', function(req, res, next) {
-//     // console.log('response', res);
-//     console.log('request', req.body);
-//     getDataFromDb();
-// });
-//
-// //-------------Zutaten-Endpoint-------------------------------------------------
-// indexRouter.get('/ingredients', function(req, res, next) {
-//     // console.log('response', res);
-//     console.log('request', req.body);
-//     getDataFromDb();
-// });
-// indexRouter.post('/ingredients', function(req, res, next) {
-//     // console.log('response', res);
-//     console.log('request', req.body);
-//     setDataToDb();
-// });
-// //-------------Kategorien-Endpoint-------------------------------------------------
-// indexRouter.get('/categories', function(req, res, next) {
-//     // console.log('response', res);
-//     console.log('request', req.body);
-//     getDataFromDb();
-// });
-// indexRouter.get('/categories/:id', function(req, res, next) {
-//     // console.log('response', res);
-//     console.log('request', req.body);
-//     getDataFromDb();
-// });
+var loadRecipes = function(data) {
+    const recipes = [];
+    const dbValue = data.val();
+    for(let index in dbValue){
+        recipes.push({
+            id: index,
+            title: dbValue[index].title,
+            imageURL: dbValue[index].imageURL,
+            description: dbValue[index].description,
+            ingredients: dbValue[index].ingredients,
+            preparation: dbValue[index].preparation,
+            category: dbValue[index].category,
+            creatorId: dbValue[index].creatorId
+        });
+    };
+    return recipes;
+};
+
+function sendErrorToClient(res, error){
+    console.log(error);
+    res.status(500).json({error: error});
+}
+
+
+
+
+
+
+
+
 
 indexRouter.get('/api/recipes', function(req, res, next) {
     console.log('------Server: Recipes-GET-Endpoint received Request');
     getDataFromDb(res);
 });
 
+// indexRouter.get('/api/recipes/:id', function(req, res, next) {
+//     console.log('------Server: Recipes-GET-Endpoint received Request');
+//     console.log('-------id: ', id);
+//     getDataFromDb(res);
+// });
+
 indexRouter.post('/api/createrecipe', function(req, res, next) {
     console.log('-------Server: Recipes-POST-Endpoint received Request');
-    console.log('-------request', req.body);
     setDataToDb(req.body,res);
 });
 
 indexRouter.post('/api/signup', function(req, res, next) {
     console.log('-------Server: Signup-POST-Endpoint received Request');
-    console.log('-------request', req.body);
     setUserToDB(req.body,res);
 });
 
 indexRouter.post('/api/create-subscription', function(req, res, next) {
     console.log('-------Server: Recipes-POST-Endpoint received Request');
-    console.log('-------request', req.body);
     setSubscriptionToDB(req.body, res);
+});
+
+indexRouter.put('/api/recipes/:id', function(req, res, next) {
+    console.log('-------Server: Recipes-PUT-Endpoint received Requestee');
+    updateDataToDB(req, res);
+});
+
+indexRouter.delete('/api/recipes/:id', function (req, res, next) {
+    console.log('-------Server: Recipes-Remove-Endpoint received Requestee');
+    removeDataFromDB(req, res);
 });
 
 app.getDataFromDb = getDataFromDb;
