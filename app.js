@@ -14,8 +14,7 @@ var cors = require('cors');
 //fireBase
 var firebase = require('firebase-admin');
 require("firebase/auth");
-var serviceAccount = require("C:/Users/abdul/Downloads/koch-pwa-db-firebase-adminsdk-endg9-7134d2a134.json");
-var storage = require('@google-cloud/storage')
+var serviceAccount = require("C:/Users/student/Downloads/koch-pwa-db-firebase-adminsdk-endg9-b574c5f29e.json");
 
 //initialize Firebase
 firebase.initializeApp({
@@ -133,14 +132,15 @@ var removeDataFromDB = function (req, res, next) {
 var setUserToDB = function (req, res, next) {
     let user;
     console.log("------setUserToDB");
-    console.log("------RequestBody:", req.email, req.password);
+    console.log("------RequestBody:", req);
     firebase.auth().createUser({
+        displayName: req.displayName,
         email: req.email,
         password: req.password
     })
-        .then(
-            user => {
+        .then(user => {
                 const newUser = {
+                    displayName: req.displayName,
                     id: user.uid,
                     email: req.email,
                     password:req.password,
@@ -216,7 +216,7 @@ var loadRecipes = function(data) {
 };
 
 function sendErrorToClient(res, error){
-    console.log(error);
+    console.log("SendErrorToClient: ",error);
     res.status(500).json({error: error});
 }
 
@@ -250,7 +250,7 @@ indexRouter.post('/api/signup', function(req, res, next) {
 });
 
 indexRouter.post('/api/create-subscription', function(req, res, next) {
-    console.log('-------Server: Recipes-POST-Endpoint received Request');
+    console.log('-------Server: Create-Subscription-POST-Endpoint received Request');
     setSubscriptionToDB(req.body, res);
 });
 
