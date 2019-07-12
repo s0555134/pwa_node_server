@@ -119,10 +119,10 @@ var removeDataFromDB = function (req, res, next) {
     console.log("------DB:Write Data from removeDataFromDB");
     console.log("------DB:Request-Body-Data: ", req.body);
     console.log("------DB:ID: ", req.params.id);
-    db.ref('recipes/' + req.params.id).remove()
+    db.ref('embedded/recipes/' + req.params.id).remove()
         .then((key) => {
             console.log(key)
-            res.status(200).json({message: "Content deleted", key: key });
+            res.status(200).json({message: "Content deleted", key: req.params.id });
         })
         .catch((error) => {
             sendErrorToClient(res, error);
