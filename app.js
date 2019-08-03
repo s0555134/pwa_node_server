@@ -14,7 +14,7 @@ var cors = require('cors');
 //fireBase
 var firebase = require('firebase-admin');
 require("firebase/auth");
-var serviceAccount = require("C:/Users/student/Downloads/koch-pwa-db-firebase-adminsdk-endg9-b574c5f29e.json");
+var serviceAccount = require("C:/Users/abdul/Downloads/koch-pwa-db-firebase-adminsdk-endg9-19de5d3dc8.json");
 
 //initialize Firebase
 firebase.initializeApp({
@@ -88,9 +88,6 @@ var setDataToDb = function (req,res) {
     })
         .then((data) => {
             key = data.key;
-            return key;
-        })
-        .then(() => {
             return sendWebNotificationToSubs(res)
         })
         .then(() => {
@@ -139,15 +136,15 @@ var setUserToDB = function (req, res, next) {
         password: req.password
     })
         .then(user => {
-                const newUser = {
-                    displayName: req.displayName,
-                    id: user.uid,
-                    email: req.email,
-                    password:req.password,
-                    registeredRecipes: []
-                };
-                res.status(201).json({newUser});
-            })
+            const newUser = {
+                displayName: req.displayName,
+                id: user.uid,
+                email: req.email,
+                password:req.password,
+                registeredRecipes: []
+            };
+            res.status(201).json({newUser});
+        })
         .catch((error) => {
             sendErrorToClient(res, error);
         })
