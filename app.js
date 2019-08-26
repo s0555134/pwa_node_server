@@ -4,6 +4,7 @@ var path = require('path');
 var cookieParser = require('cookie-parser');
 var logger = require('morgan');
 var webpush = require('web-push');
+var history = require('connect-history-api-fallback');
 
 var indexRouter = require('./routes/index');
 var usersRouter = require('./routes/users');
@@ -38,9 +39,6 @@ app.options('*', cors());
 
 app.use('/', indexRouter);
 app.use('/users', usersRouter);
-// app.use('/recipes', recipesRouter);
-// app.use('/poste-dein-rezept', indexRouter);
-
 
 // catch 404 and forward to error handler
 app.use(function (req, res, next) {
@@ -59,6 +57,8 @@ app.use(function (err, req, res, next) {
     res.render('error');
 });
 
+//Handle 404 request to Home
+app.use(history());
 
 //Admin-SDK firebase access
 var db = firebase.database();
@@ -101,7 +101,7 @@ var setDataToDb = function (req,res) {
 var getDataFromDb = function (res) {
     db.ref('embedded/recipes').once('value')
         .then((data) => {
-            console.log("------------------DB:Got Data: ", data.val());
+            console.log("------------------DB:Got Data: ");
             return loadRecipes(data);
         })
         .then( (recipes) => {
@@ -217,24 +217,10 @@ function sendErrorToClient(res, error){
     res.status(500).json({error: error});
 }
 
-
-
-
-
-
-
-
-
 indexRouter.get('/api/recipes', function(req, res, next) {
     console.log('------Server: Recipes-GET-Endpoint received Request');
     getDataFromDb(res);
 });
-
-// indexRouter.get('/api/recipes/:id', function(req, res, next) {
-//     console.log('------Server: Recipes-GET-Endpoint received Request');
-//     console.log('-------id: ', id);
-//     getDataFromDb(res);
-// });
 
 indexRouter.post('/api/createrecipe', function(req, res, next) {
     console.log('-------Server: Recipes-POST-Endpoint received Request');
